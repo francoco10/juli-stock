@@ -213,9 +213,13 @@ let numeroRemito = 1;
 async function cargarStock() {
   try {
     const result = await window.storage.get('stock-productos', true);
-    stock = result ? JSON.parse(result.value) : {};
+    if (result && result.value) {
+      stock = JSON.parse(result.value);
+    } else {
+      stock = {};
+    }
   } catch (error) {
-    console.log('Inicializando stock vacío');
+    console.log('Inicializando stock vacío:', error);
     stock = {};
   }
   renderStockUI();
@@ -223,27 +227,37 @@ async function cargarStock() {
 
 async function guardarStock() {
   try {
-    await window.storage.set('stock-productos', JSON.stringify(stock), true);
-    mostrarNotificacion('✅ Stock actualizado en todos los dispositivos');
-    renderStockUI();
+    const resultado = await window.storage.set('stock-productos', JSON.stringify(stock), true);
+    
+    if (resultado) {
+      mostrarNotificacion('✅ Stock actualizado en todos los dispositivos');
+      renderStockUI();
+    } else {
+      console.error('No se pudo guardar el stock');
+      mostrarNotificacion('⚠️ Error al guardar el stock', true);
+    }
   } catch (error) {
     console.error('Error guardando stock:', error);
-    alert('Error al guardar el stock. Intenta nuevamente.');
+    mostrarNotificacion('⚠️ Error al guardar el stock', true);
   }
 }
 
 async function cargarPedidos() {
   try {
     const result = await window.storage.get('pedidos-lista', true);
-    pedidos = result ? JSON.parse(result.value) : [];
-    pedidos = pedidos
-      .filter(p => p && typeof p === "object")
-      .map(p => ({
-        ...p,
-        terminado: p.terminado ?? false
-      }));
+    if (result && result.value) {
+      pedidos = JSON.parse(result.value);
+      pedidos = pedidos
+        .filter(p => p && typeof p === "object")
+        .map(p => ({
+          ...p,
+          terminado: p.terminado ?? false
+        }));
+    } else {
+      pedidos = [];
+    }
   } catch (error) {
-    console.log('Inicializando pedidos vacíos');
+    console.log('Inicializando pedidos vacíos:', error);
     pedidos = [];
   }
   renderPedidos();
@@ -251,17 +265,24 @@ async function cargarPedidos() {
 
 async function guardarPedidos() {
   try {
-    await window.storage.set('pedidos-lista', JSON.stringify(pedidos), true);
-    renderPedidos();
+    const resultado = await window.storage.set('pedidos-lista', JSON.stringify(pedidos), true);
+    if (resultado) {
+      renderPedidos();
+    }
   } catch (error) {
     console.error('Error guardando pedidos:', error);
+    mostrarNotificacion('⚠️ Error al guardar pedidos', true);
   }
 }
 
 async function cargarNumeroRemito() {
   try {
     const result = await window.storage.get('numero-remito', true);
-    numeroRemito = result ? parseInt(result.value) : 1;
+    if (result && result.value) {
+      numeroRemito = parseInt(result.value);
+    } else {
+      numeroRemito = 1;
+    }
   } catch (error) {
     numeroRemito = 1;
   }
@@ -275,9 +296,9 @@ async function guardarNumeroRemito() {
   }
 }
 
-function mostrarNotificacion(mensaje) {
+function mostrarNotificacion(mensaje, esError = false) {
   const notif = document.createElement('div');
-  notif.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+  notif.className = `fixed top-4 right-4 ${esError ? 'bg-red-600' : 'bg-green-600'} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
   notif.textContent = mensaje;
   document.body.appendChild(notif);
   setTimeout(() => notif.remove(), 3000);
