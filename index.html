@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestor de Pedidos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+ 
+
+</head>
+<body class="bg-white min-h-screen flex">
+
+  <!-- SIDEBAR LATERAL -->
+  <aside class="w-48 bg-gray-100 p-4">
+    <h2 class="text-lg font-bold mb-4">Menú</h2>
+    <button id="btnPedidos" class="w-full bg-red-600 text-white py-2 mb-2 rounded">Pedidos</button>
+    <button id="btnStock" class="w-full bg-green-600 text-white py-2 rounded">Stock</button>
+  </aside>
+
+  <!-- CONTENIDO PRINCIPAL (mantuve tu diseño intacto) -->
+  <main class="flex-1 p-6">
+    <div id="seccionPedidos">
+      <h1 class="text-3xl font-bold text-red-600 mb-6">Gestor de Pedidos</h1>
+
+      <!-- Pedidos terminados -->
+      <section class="w-full max-w-3xl mb-8">
+        <h2 class="text-xl font-semibold text-green-700 mb-2">Pedidos Terminados</h2>
+        <div id="pedidos-terminados" class="bg-green-50 p-4 rounded-xl shadow"></div>
+      </section>
+
+      <!-- Botón para nuevo pedido -->
+      <button id="nuevoPedidoBtn" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2 rounded-lg mb-6 transition">
+        Nuevo Pedido
+      </button>
+
+      <!-- Formulario de pedido -->
+      <section id="formulario" class="hidden w-full max-w-3xl bg-green-50 p-6 rounded-xl shadow">
+        <h2 class="text-xl font-semibold mb-4 text-green-700">Nuevo Pedido</h2>
+
+        <label class="block mb-2 text-sm font-medium">Nombre del Cliente</label>
+        <input id="nombre" type="text" class="w-full border p-2 rounded mb-4" placeholder="Ej: Juan Pérez" />
+
+        <label class="block mb-2 text-sm font-medium">Dirección</label>
+        <input id="direccion" type="text" class="w-full border p-2 rounded mb-4" placeholder="Ej: Calle 123" />
+
+        <label class="block mb-2 text-sm font-medium">CUIT del Cliente</label>
+        <input id="cuit" type="text" class="w-full border p-2 rounded mb-4" placeholder="Ej: xx-xxxxxxxx-x" />
+
+        <h3 class="text-lg font-semibold text-green-700 mb-2">Productos</h3>
+        <table class="w-full mb-4">
+          <thead>
+            <tr class="text-left text-sm font-medium">
+              <th>Producto</th>
+              <th>Cantidad</th>
+              <th>Porcentaje</th>
+              <th>Precio</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tablaProductos"></tbody>
+        </table>
+        <button id="agregarProducto" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded mb-4 transition">
+          + Agregar producto
+        </button>
+        <p class="text-right text-lg font-bold mt-2">Total: $ <span id="totalPedido">0.00</span></p>
+
+        <div class="flex justify-end gap-2">
+          <button id="cancelar" class="bg-gray-300 hover:bg-gray-400 text-black px-4 py-2 rounded transition">Cancelar</button>
+          <button id="guardar" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition">Guardar Pedido</button>
+        </div>
+      </section>
+
+      <!-- Lista de pedidos pendientes -->
+      <section class="w-full max-w-3xl mt-8">
+        <h2 class="text-xl font-semibold text-red-700 mb-2">Pedidos Pendientes</h2>
+        <div id="pedidosPendientes" class="bg-red-50 p-4 rounded-xl shadow"></div>
+      </section>
+    </div>
+
+    <!-- SECCIÓN STOCK (oculta por defecto) -->
+    <div id="seccionStock" class="hidden">
+      <h1 class="text-3xl font-bold text-green-700 mb-6">Stock</h1>
+
+      <div class="bg-green-50 p-4 rounded-xl shadow max-w-3xl mb-6">
+        <h2 class="text-xl font-semibold mb-2">Agregar mercadería recibida</h2>
+
+        <label class="block mb-2 text-sm font-medium">Producto (elige o escribe)</label>
+        <input id="stockProducto" list="productosList" class="w-full border p-2 rounded mb-2" placeholder="Comenzá a escribir...">
+        <datalist id="productosList"></datalist>
+
+        <label class="block mb-2 text-sm font-medium">Cantidad a agregar</label>
+        <input id="stockCantidad" type="number" class="w-full border p-2 rounded mb-4" />
+
+        <div class="flex gap-2">
+          <button id="btnAgregarStock" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Agregar</button>
+          <button id="btnVaciarStock" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">Vaciar stock (debug)</button>
+        </div>
+      </div>
+
+      <h2 class="text-xl font-semibold text-green-700 mb-2">Stock actual</h2>
+      <div id="listaStock" class="bg-white p-4 rounded-xl shadow max-w-3xl"></div>
+    </div>
+  </main>
+
+  <!-- ===========================
+       SCRIPT - Productos, pedidos, stock
+       =========================== -->
+  <script>
+/* ----------------- productosBase (completo) ----------------- */
+const productosBase = [
+  { nombre: "Aritos de maíz sabor pizza 14x65g", precio: 539.02 },
+  { nombre: "Aritos de maíz sabor pizza x1kg", precio: 3159.61 },
+  { nombre: "Palitos de maiz sabor extra queso 14x65g", precio: 539.02 },
+  { nombre: "Palitos de maiz sabor extra queso 14x180g", precio: 1177.86 },
+  { nombre: "Palitos de maiz sabor extra queso x1kg", precio: 3159.61 },
+  { nombre: "Tubitos de maíz sabor jamón 14x65gr", precio: 539.02 },
+  { nombre: "Tubitos de maíz sabor jamón x1kg", precio: 3159.61 },
+  { nombre: "Palitos salados 36x150g", precio: 640.70 },
+  { nombre: "Palitos salados 12x450g", precio: 1609.70 },
+  { nombre: "Palitos salados 14x1kg", precio: 2972.93 },
+  { nombre: "Tutucas 32x38g", precio: 277.27 },
+  { nombre: "Tutucas 14x90g", precio: 577.39 },
+  { nombre: "Tutucas x1kg", precio: 3813.33 },
+  { nombre: "Mix 24x45g", precio: 386.48 },
+  { nombre: "Mix 14x180g", precio: 1589.82 },
+  { nombre: "Bee croc 20x120g", precio: 619.04 },
+  { nombre: "Maní tostado 18x100g", precio: 550.06 },
+  { nombre: "Maní manteca 18x100g", precio: 614.78 },
+  { nombre: "Maní con cáscara 16x300g", precio: 1453.92 },
+  { nombre: "Maní con cáscara 10x1kg", precio: 4296.45 },
+  { nombre: "Maní repelado salado 15x1kg", precio: 4228.49 },
+  { nombre: "Galletitas chia y naranja 20x150g", precio: 1301.09 },
+  { nombre: "Galletitas chia y limon 20x150g", precio: 1301.09 },
+  { nombre: "Galletitas mix 5 semillas 20x200", precio: 1301.09 },
+  { nombre: "Galletitas con chips de chocolate 20x200g", precio: 1301.09 },
+  { nombre: "Galletitas con nueces 20x200g", precio: 1301.09 },
+  { nombre: "Galletitas frutos rojos 20x200g", precio: 1301.09 },
+  { nombre: "Galletitas coco y DDL", precio: 1301.09 },
+  { nombre: "Galletitas saladas", precio: 1301.09 },
+  { nombre: "Galletitas chocolate y mani 20x200g", precio: 1301.09 },
+  { nombre: "Papas fritas 24x35g", precio: 435.07 },
+  { nombre: "Papas fritas 16x70g", precio: 752.52 },
+  { nombre: "Papas fritas saborizadas asado criollo 16x70g", precio: 871.69 },
+  { nombre: "Papas fritas saborizadas crema y cibulete 16x70g", precio: 871.69 },
+  { nombre: "Papas fritas saborizadas cheddar 16x70g", precio: 871.69 },
+  { nombre: "Papas fritas 16x160g", precio: 1585.42 },
+  { nombre: "Papas fritas 12x250g", precio: 2267.04 },
+  { nombre: "Papas fritas 5x1kg", precio: 8214.16 },
+  { nombre: "Papas fritas 24x100g PAI", precio: 990.43 },
+  { nombre: "Papas corte americano 16x80g", precio: 860.08 },
+  { nombre: "Papas corte americano 12x270g", precio: 2448.41 },
+  { nombre: "Papas corte americano 5x900g", precio: 7803.57 },
+  { nombre: "Tornic 24x65gr", precio: 494.52 },
+  { nombre: "Papas fritas saborizadas cheddar-panceta 16x70", precio: 871.69 },
+  { nombre: "Papas fritas saborizadas jalapeño y limon 16x70", precio: 871.69 },
+  { nombre: "Papas fritas saborizadas huevo frito 16x70", precio: 871.69 },
+  { nombre: "Papas fritas saborizadas ketchup 16x70", precio: 871.69 },
+  { nombre: "Papas fritas saborizadas provenzal 16x70", precio: 871.69 },
+  { nombre: "Mandioca 16x90g", precio: 909.48 },
+  { nombre: "Batatas fritas 16x90g", precio: 909.48 },
+  { nombre: "Chips (mandioca, papas, batatas) 16x90", precio: 909.48 },
+  { nombre: "Curvis 14x65g", precio: 539.02 },
+  { nombre: "Anillitos de cebolla 16x70g", precio: 668.40 },
+  { nombre: "Cascarones 18x200g", precio: 1467.63 },
+  { nombre: "Cascarones 5x600g", precio: 4080.37 },
+  { nombre: "Conix 5x600g", precio: 5184.56 },
+  { nombre: "Conix 16x70g", precio: 844.71 },
+  { nombre: "Conix 14x200", precio: 1897.78 },
+  { nombre: "Exibidores", precio: 25000.00 },
+  { nombre: "Aritos de colores bolsa x1,5kg", precio: 5255.65 },
+  { nombre: "Bolitas de chocolate bolsa x1,5kg", precio: 6153.66 },
+  { nombre: "Aritos de colores 14x150g", precio: 619.05 },
+  { nombre: "Bolitas de chocolate 14x150g", precio: 648.53 },
+  { nombre: "Mani recubierto saborizado 1kg", precio: 5000 },
+  { nombre: "Mix cuyano 1kg", precio: 14000 },
+  { nombre: "Mix tropical 1kg", precio: 13000 },
+  { nombre: "Mix seco 1kg", precio: 16000 },
+  { nombre: "Mix mediterraneo 1kg", precio: 20000 },
+  { nombre: "Nuez mariposa 1kg", precio: 19000 },
+  { nombre: "Almendra 1kg", precio: 20000 },
+  { nombre: "Almohaditas 1kg", precio: 6000 },
+  { nombre: "Almohaditas 2,5kg", precio: 13300 },
+  { nombre: "Arandanos 1kg", precio: 15000 },
+  { nombre: "Copos azucarados 1kg", precio: 4500 },
+  { nombre: "Copos azucarados 3,4kg", precio: 13000 },
+  { nombre: "Copos sin azucar 1kg", precio: 4500 },
+  { nombre: "Copos sin azucar 3kg", precio: 10500 },
+];
+
+/* ------------------- CONFIG ------------------- */
+const porcentajes = [35, 49, 15, 25, 10, 7];
+
+const nuevoPedidoBtn = document.getElementById('nuevoPedidoBtn');
+const formulario = document.getElementById('formulario');
+nuevoPedidoBtn.addEventListener("click", () => {
+  formulario.classList.remove("hidden");
+  nuevoPedidoBtn.classList.add("hidden");
+  tablaProductos.innerHTML = "";
+
+
+  // Limpiar tabla de productos y crear una fila nueva vacía
+  tablaProductos.innerHTML = "";
+  crearFilaProducto();
+
+  // Limpiar los inputs
+  document.getElementById('nombre').value = "";
+  document.getElementById('direccion').value = "";
+  document.getElementById('cuit').value = "";
+});
+
+const cancelarBtn = document.getElementById('cancelar');
+const guardarBtn = document.getElementById('guardar');
+const agregarProductoBtn = document.getElementById('agregarProducto');
+const tablaProductos = document.getElementById('tablaProductos');
+const pedidosPendientes = document.getElementById('pedidosPendientes');
+const pedidosTerminados = document.getElementById('pedidos-terminados');
+
+cancelarBtn.addEventListener('click', () => {
+  formulario.classList.add('hidden');
+  nuevoPedidoBtn.classList.remove('hidden');
+
+  document.getElementById('nombre').value = '';
+  document.getElementById('direccion').value = '';
+  document.getElementById('cuit').value = '';
+
+  tablaProductos.innerHTML = '';
+  crearFilaProducto();
+  actualizarTotal();
+});
+
+
+let pedidos = JSON.parse(localStorage.getItem('pedidos')) || [];
+let stock = JSON.parse(localStorage.getItem("stock")) || [];
+
+
+
+
+pedidos = pedidos
+  .filter(p => p && typeof p === "object")
+  .map(p => ({
+    ...p,
+    terminado: p.terminado ?? false
+  }));
+
+localStorage.setItem('pedidos', JSON.stringify(pedidos));
+
+let numeroRemito = parseInt(localStorage.getItem('numeroRemito') || 1);
+
+/* ------------------- AUTOCOMPLETADO + PORCENTAJE ------------------- */
+function crearFilaProducto() {
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>
+      <input type="text" class="border p-1 rounded w-full producto-input" placeholder="Producto">
+      <div class="suggestions bg-white border rounded shadow hidden"></div>
+    </td>
+    <td><input type="number" class="border p-1 rounded w-full cantidad-input" placeholder="Cantidad"></td>
+    <td>
+      <select class="border p-1 rounded porcentaje">
+        ${porcentajes.map(p => `<option value="${p}">${p}%</option>`).join("")}
+      </select>
+    </td>
+    <td><input type="number" class="border p-1 rounded w-full precio-final" placeholder="Precio" readonly></td>
+    <td><button class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded eliminarProducto">X</button></td>
+  `;
+
+  const input = row.querySelector(".producto-input");
+  const cantidadInput = row.querySelector(".cantidad-input");
+  const sugerencias = row.querySelector(".suggestions");
+  const porcentajeSelect = row.querySelector(".porcentaje");
+  const precioInput = row.querySelector(".precio-final");
+  const eliminarBtn = row.querySelector(".eliminarProducto");
+
+  function actualizarPrecio() {
+  const texto = input.value.toLowerCase();
+  const prod = productosBase.find(p => p.nombre.toLowerCase() === texto);
+
+  const cantidad = parseFloat(cantidadInput.value) || 0;
+  const porcentaje = parseFloat(porcentajeSelect.value);
+
+  if (prod) {
+    // Precio total correctamente calculado con cantidad y porcentaje
+    const porcentaje = parseFloat(porcentajeSelect.value);
+    const precioCalculado = (prod.precio * cantidad) * (1 + porcentaje / 100);
+    precioInput.value = precioCalculado.toFixed(2);
+  } else {
+    precioInput.value = "";
+  }
+
+  actualizarTotal();
+}
+
+
+  input.addEventListener("input", () => {
+    const texto = input.value.toLowerCase();
+    const filtrados = productosBase.filter(p => p.nombre.toLowerCase().includes(texto));
+
+    sugerencias.innerHTML =
+      filtrados.map(p => `<div class="p-1 hover:bg-gray-200 cursor-pointer">${p.nombre}</div>`).join("");
+
+    sugerencias.classList.toggle("hidden", filtrados.length === 0);
+
+    sugerencias.querySelectorAll("div").forEach(div => {
+      div.addEventListener("click", () => {
+        input.value = div.innerText;
+        sugerencias.classList.add("hidden");
+        actualizarPrecio();
+      });
+    });
+
+    actualizarTotal(); // 👈 SE AGREGA
+  });
+
+  input.addEventListener("blur", actualizarPrecio);
+
+  porcentajeSelect.addEventListener("change", () => {
+    actualizarPrecio();
+    actualizarTotal(); // 👈 SE AGREGA
+  });
+
+  cantidadInput.addEventListener("input", () => {
+    actualizarPrecio();
+    actualizarTotal(); // 👈 SE AGREGA
+  });
+
+  eliminarBtn.addEventListener("click", () => {
+    row.remove();
+    actualizarTotal(); // 👈 SE AGREGA
+  });
+
+  tablaProductos.appendChild(row);
+}
+
+function actualizarTotal() {
+  let total = 0;
+  document.querySelectorAll('.precio-final').forEach(precioInput => {
+    const precio = parseFloat(precioInput.value) || 0;
+    total += precio;
+  });
+
+  document.getElementById('totalPedido').innerText = total.toFixed(2);
+}
+
+
+
+agregarProductoBtn.addEventListener("click", crearFilaProducto);
+
+/* ------------------- GUARDAR PEDIDO ------------------- */
+guardarBtn.addEventListener('click', () => {
+  const nombre = document.getElementById('nombre').value.trim();
+  const direccion = document.getElementById('direccion').value.trim();
+  const cuit = document.getElementById('cuit').value.trim();
+  const fecha = new Date().toLocaleDateString();
+
+  // Obtener productos válidos
+  const productos = Array.from(tablaProductos.querySelectorAll('tr'))
+    .map(row => ({
+      nombre: row.querySelector('.producto-input').value.trim(),
+      cantidad: row.querySelector('.cantidad-input').value.trim(),
+      precio: row.querySelector('.precio-final').value.trim()
+    }))
+    .filter(p => p.nombre !== "" && p.cantidad !== "" && p.precio !== "");
+
+  if (!nombre || !direccion || !cuit || productos.length === 0) {
+    alert('Por favor completa todos los campos y agrega al menos un producto.');
+    return;
+  }
+
+  // =============================
+  // 🔻 DESCONTAR STOCK ACÁ 🔻
+  // =============================
+  productos.forEach(p => {
+    const nombreProd = p.nombre;
+    const cantidadPedida = parseFloat(p.cantidad);
+
+    if (stock[nombreProd] !== undefined) {
+      stock[nombreProd] -= cantidadPedida;
+      if (stock[nombreProd] < 0) stock[nombreProd] = 0; // Evitar negativos
+    }
+  });
+
+  // Guardar stock actualizado
+  localStorage.setItem("stock", JSON.stringify(stock));
+  renderStockUI();
+  // =============================
+  // 🔺 FIN DESCUENTO STOCK 🔺
+  // =============================
+
+  // Guardar el pedido
+  pedidos.push({ nombre, direccion, cuit, fecha, productos, terminado: false, numero: numeroRemito });
+  numeroRemito++;
+  localStorage.setItem('numeroRemito', numeroRemito);
+  localStorage.setItem('pedidos', JSON.stringify(pedidos));
+
+  renderPedidos();
+  formulario.classList.add('hidden');
+  nuevoPedidoBtn.classList.remove('hidden');
+});
+
+
+
+
+/* ------------------- MOSTRAR PEDIDOS ------------------- */
+const renderPedidos = () => {
+  pedidosPendientes.innerHTML = '';
+  pedidosTerminados.innerHTML = '';
+
+  pedidos.forEach((pedido, index) => {
+    const div = document.createElement('div');
+    div.className = 'bg-white p-4 rounded-lg shadow mb-3 border-l-4 ' + (pedido.terminado ? 'border-green-500' : 'border-red-500');
+
+    const total = pedido.productos.reduce((sum, p) => sum + parseFloat(p.precio), 0);
+
+
+    div.innerHTML = `
+  <p><strong>Cliente:</strong> ${pedido.nombre}</p>
+  <p><strong>Dirección:</strong> ${pedido.direccion}</p>
+  <p><strong>Cuit:</strong> ${pedido.cuit}</p>
+  <p><strong>Fecha:</strong> ${pedido.fecha}</p>
+
+  <details class="mt-2 mb-2">
+    <summary class="cursor-pointer text-sm text-blue-700 underline">Ver productos</summary>
+    <ul class="mt-1 text-sm">
+      ${pedido.productos.map(p => {
+    const cantidad = parseFloat(p.cantidad);
+    const totalFila = parseFloat(p.precio);
+    const unitario = totalFila / cantidad;
+    return `<li>${p.cantidad} x ${p.nombre} — $${unitario.toFixed(2)} c/u — Subtotal: $${totalFila.toFixed(2)}</li>`;
+    }).join("")}
+
+    </ul>
+  </details>
+
+  <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+
+  <button onclick="terminarPedido(${index})" class="bg-green-600 text-white px-3 py-1 rounded">Terminar</button>
+  <button onclick="descargarPDF(${index})" class="bg-blue-600 text-white px-3 py-1 rounded">Remito</button>
+  <button onclick="editarPedido(${index})" class="bg-yellow-500 text-white px-3 py-1 rounded">Editar</button>
+  <button onclick="eliminarPedido(${index})" class="bg-gray-600 text-white px-3 py-1 rounded">Eliminar</button>
+`;
+
+
+    if (pedido.terminado) pedidosTerminados.appendChild(div);
+    else pedidosPendientes.appendChild(div);
+  });
+};
+
+window.terminarPedido = (i) => {
+  pedidos[i].terminado = true;
+  localStorage.setItem('pedidos', JSON.stringify(pedidos));
+  renderPedidos();
+};
+
+window.eliminarPedido = (i) => {
+  // restaurar stock al eliminar (si fue descontado anteriormente)
+  const pedido = pedidos[i];
+  if (pedido && pedido.productos) {
+    pedido.productos.forEach(p => {
+      const nombre = p.nombre;
+      const cant = parseFloat(p.cantidad) || 0;
+      if (!stock[nombre]) stock[nombre] = 0;
+      stock[nombre] += cant;
+    });
+    localStorage.setItem('stock', JSON.stringify(stock));
+  }
+
+  pedidos.splice(i, 1);
+  localStorage.setItem('pedidos', JSON.stringify(pedidos));
+  renderPedidos();
+  renderStockUI();
+};
+
+window.editarPedido = (i) => {
+  const pedido = pedidos[i];
+
+  // antes de editar, restauramos el stock de ese pedido (para no perder unidades)
+  if (pedido && pedido.productos) {
+    pedido.productos.forEach(p => {
+      const nombre = p.nombre;
+      const cant = parseFloat(p.cantidad) || 0;
+      if (!stock[nombre]) stock[nombre] = 0;
+      stock[nombre] += cant;
+    });
+    localStorage.setItem('stock', JSON.stringify(stock));
+    renderStockUI();
+  }
+
+  formulario.classList.remove("hidden");
+  nuevoPedidoBtn.classList.add("hidden");
+
+  document.getElementById('nombre').value = pedido.nombre;
+  document.getElementById('direccion').value = pedido.direccion;
+  document.getElementById('cuit').value = pedido.cuit;
+
+  tablaProductos.innerHTML = "";
+
+  pedido.productos.forEach(p => {
+    crearFilaProducto();
+    const fila = tablaProductos.lastChild;
+    fila.querySelector('.producto-input').value = p.nombre;
+    fila.querySelector('.cantidad-input').value = p.cantidad;
+    fila.querySelector('.porcentaje').value = (function(){
+      // intento aproximado: si precio guardado / (basePrecio*cantidad) > 1, estimar porcentaje
+      const base = productosBase.find(pb => pb.nombre === p.nombre);
+      if (!base) return porcentajes[0];
+      const precioFinal = parseFloat(p.precio);
+      const baseTotal = base.precio * parseFloat(p.cantidad);
+      if (baseTotal === 0) return porcentajes[0];
+      const pct = Math.round((precioFinal / baseTotal - 1) * 100);
+      // elegir el porcentaje disponible más cercano
+      let nearest = porcentajes[0];
+      porcentajes.forEach(x => { if (Math.abs(x - pct) < Math.abs(nearest - pct)) nearest = x; });
+      return nearest;
+    })();
+    fila.querySelector('.precio-final').value = p.precio;
+  });
+
+  // eliminamos el pedido original para que al guardar quede actualizado
+  pedidos.splice(i, 1);
+  localStorage.setItem('pedidos', JSON.stringify(pedidos));
+  renderPedidos();
+};
+
+
+/* ------------------- PDF (NO TOQUÉ NADA) ------------------- */
+const { jsPDF } = window.jspdf;
+window.descargarPDF = (index) => {
+  const pedido = pedidos[index];
+  const doc = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
+
+  doc.setFillColor(250, 250, 250);
+  doc.rect(0, 0, 420, 80, "F");
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(13);
+  doc.text("GM-DISTRIBUCIONES", 30, 43);
+  doc.setFontSize(12);
+  doc.text("Flavio Giulioni", 30, 55);
+  doc.setFontSize(10);
+  doc.text("gmdistribuciones3@gmail.com", 30, 65);
+  doc.text("CUIT: 20-25804000-8  |  +54 3425014152", 30, 78);
+
+  doc.setFontSize(20);
+  doc.setTextColor(200, 0, 0);
+  doc.text("JULICROC", 30, 30);
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(12);
+  doc.text(`Remito N° ${pedido.numero || ''}`, 300, 35);
+  doc.text(`Fecha: ${pedido.fecha || ''}`, 300, 50);
+
+  doc.setDrawColor(0, 150, 0);
+  doc.line(30, 100, 390, 100);
+
+  doc.setTextColor(0, 100, 0);
+  doc.setFontSize(13);
+  doc.text("DATOS DEL CLIENTE", 30, 95);
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(12);
+  doc.text(`Nombre: ${pedido.nombre}`, 30, 115);
+  doc.text(`Dirección: ${pedido.direccion}`, 30, 130);
+  doc.text(`CUIT: ${pedido.cuit}`, 30, 143);
+
+  doc.setTextColor(0, 100, 0);
+  doc.setFontSize(13);
+  doc.text("PRODUCTOS", 30, 160);
+  doc.setDrawColor(0, 150, 0);
+  doc.line(30, 165, 390, 165);
+
+  doc.setFontSize(16);
+  doc.setTextColor(0, 0, 0);
+
+  let y = 185;
+  doc.text("Cant.", 16, y);
+  doc.text("Producto", 150, y);
+  doc.text("Precio", 300, y);
+  doc.text("Subtotal", 380, y);
+
+  y += 20;
+
+  let total = 0;
+pedido.productos.forEach(p => {
+  const cantidad = parseFloat(p.cantidad);
+  const totalFila = parseFloat(p.precio); // este es el total final que guardaste
+  const precioUnitario = totalFila / cantidad; // acá recuperamos el unitario
+  const subtotal = precioUnitario * cantidad; // subtotal correcto
+  total += subtotal;
+
+  // ←——— SALTO DE PÁGINA AUTOMÁTICO ———→
+  if (y > 700) {           // límite de la hoja A4 en px (portrait)
+    doc.addPage();
+    y = 40;                // reiniciás donde querés que arranque en la nueva página
+
+    // Encabezados de columnas en la nueva hoja
+    doc.setFontSize(12);
+    doc.text("Cant.", 16, y);
+    doc.text("Producto", 150, y);
+    doc.text("Precio", 300, y);
+    doc.text("Subtotal", 380, y);
+    y += 20;
+  }
+
+  // Imprimir fila
+  doc.setFontSize(11);
+  doc.text(String(cantidad), 20, y);
+  doc.text(p.nombre, 50, y);
+  doc.text(`$${precioUnitario.toFixed(2)}`, 300, y);
+  doc.text(`$${subtotal.toFixed(2)}`, 380, y);
+
+  y += 13; // separación entre renglones
+
+});
+
+
+  doc.setFontSize(14);
+  doc.setTextColor(200, 0, 0);
+  doc.text(`TOTAL: $${total.toFixed(2)}`, 325, y + 20);
+
+  doc.save(`Remito_${pedido.nombre}.pdf`);
+};
+
+renderPedidos();
+
+/* ----------------- STOCK: render del UI y datalist ----------------- */
+
+function guardarStock() {
+  localStorage.setItem("stock", JSON.stringify(stock));
+  renderStockUI();
+}
+
+function renderStockUI() {
+  const lista = document.getElementById('listaStock');
+  lista.innerHTML = '';
+
+  const keys = Object.keys(stock);
+
+  if (keys.length === 0) {
+    lista.innerHTML = '<p class="text-gray-600">No hay stock cargado.</p>';
+    return;
+  }
+
+  keys.forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'border-b py-2 flex items-center gap-4';
+
+    div.innerHTML = `
+      <input 
+        type="text" 
+        class="border p-1 rounded w-40"
+        value="${k}"
+        onchange="editarStockNombre('${k}', this.value)"
+      />
+
+      <input 
+        type="number" 
+        class="border p-1 rounded w-24"
+        value="${stock[k]}"
+        onchange="editarStockCantidad('${k}', this.value)"
+      />
+
+      <button 
+        class="bg-red-600 text-white px-2 py-1 rounded"
+        onclick="eliminarStock('${k}')"
+      >
+        Borrar
+      </button>
+    `;
+
+    lista.appendChild(div);
+  });
+}
+function editarStockNombre(nombreViejo, nombreNuevo) {
+  if (!nombreNuevo.trim()) return;
+
+  stock[nombreNuevo] = stock[nombreViejo];
+  delete stock[nombreViejo];
+
+  localStorage.setItem("stock", JSON.stringify(stock));
+  renderStockUI();
+}
+
+function editarStockCantidad(nombre, cantidad) {
+  stock[nombre] = Number(cantidad);
+  localStorage.setItem("stock", JSON.stringify(stock));
+  renderStockUI();
+}
+
+function eliminarStock(nombre) {
+  delete stock[nombre];
+  localStorage.setItem("stock", JSON.stringify(stock));
+  renderStockUI();
+}
+
+
+// llenar datalist con productosBase (para autocompletar al agregar stock)
+function fillDatalistProductos() {
+  const dl = document.getElementById('productosList');
+  dl.innerHTML = productosBase.map(p => `<option value="${p.nombre}">`).join('');
+}
+fillDatalistProductos();
+renderStockUI();
+
+/* ----------------- BOTONES STOCK ----------------- */
+document.getElementById('btnAgregarStock').addEventListener('click', () => {
+  const nombre = document.getElementById('stockProducto').value.trim();
+  const cantidad = parseInt(document.getElementById('stockCantidad').value, 10);
+  if (!nombre || isNaN(cantidad) || cantidad <= 0) {
+    alert('Completa producto y cantidad válidos.');
+    return;
+  }
+  stock[nombre] = (stock[nombre] || 0) + cantidad;
+  localStorage.setItem('stock', JSON.stringify(stock));
+  document.getElementById('stockProducto').value = '';
+  document.getElementById('stockCantidad').value = '';
+  renderStockUI();
+});
+
+// botón debug para vaciar stock (te puede servir para pruebas)
+document.getElementById('btnVaciarStock').addEventListener('click', () => {
+  if (!confirm('Vaciar todo el stock? (solo para pruebas)')) return;
+  stock = {};
+  localStorage.setItem('stock', JSON.stringify(stock));
+  renderStockUI();
+});
+
+/* ----------------- AL INICIAR: asegurar fila y total ----------------- */
+if (!tablaProductos.querySelector('tr')) crearFilaProducto();
+actualizarTotal();
+
+
+
+// =====================
+// BOTONES DEL MENÚ LATERAL
+// =====================
+
+const btnPedidos = document.getElementById("btnPedidos");
+const btnStock   = document.getElementById("btnStock");
+
+const seccionPedidos = document.getElementById("seccionPedidos");
+const seccionStock   = document.getElementById("seccionStock");
+
+// Mostrar PEDIDOS
+btnPedidos.addEventListener("click", () => {
+  seccionPedidos.classList.remove("hidden");
+  seccionStock.classList.add("hidden");
+});
+
+// Mostrar STOCK
+btnStock.addEventListener("click", () => {
+  seccionStock.classList.remove("hidden");
+  seccionPedidos.classList.add("hidden");
+});
+
+
+  </script>
+</body>
+</html>
