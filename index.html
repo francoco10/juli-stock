@@ -1,18 +1,12 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestor de Pedidos</title>
+  <title>Gestor de Pedidos - Sincronizado</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-
-  
- 
-
 </head>
 <body class="bg-white min-h-screen flex">
 
@@ -21,9 +15,15 @@
     <h2 class="text-lg font-bold mb-4">Menú</h2>
     <button id="btnPedidos" class="w-full bg-red-600 text-white py-2 mb-2 rounded">Pedidos</button>
     <button id="btnStock" class="w-full bg-green-600 text-white py-2 rounded">Stock</button>
+    <div class="mt-4 p-2 bg-blue-100 rounded text-xs">
+      <div class="flex items-center gap-1">
+        <span id="syncStatus" class="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+        <span>Sincronizado</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- CONTENIDO PRINCIPAL (mantuve tu diseño intacto) -->
+  <!-- CONTENIDO PRINCIPAL -->
   <main class="flex-1 p-6">
     <div id="seccionPedidos">
       <h1 class="text-3xl font-bold text-red-600 mb-6">Gestor de Pedidos</h1>
@@ -83,9 +83,15 @@
       </section>
     </div>
 
-    <!-- SECCIÓN STOCK (oculta por defecto) -->
+    <!-- SECCIÓN STOCK -->
     <div id="seccionStock" class="hidden">
-      <h1 class="text-3xl font-bold text-green-700 mb-6">Stock</h1>
+      <h1 class="text-3xl font-bold text-green-700 mb-6">Stock Sincronizado</h1>
+      
+      <div class="bg-blue-50 p-3 rounded-lg mb-4 border border-blue-300">
+        <p class="text-sm text-blue-800">
+          ℹ️ <strong>Sincronización automática:</strong> Los cambios en el stock se actualizan en tiempo real en todos los dispositivos conectados.
+        </p>
+      </div>
 
       <div class="bg-green-50 p-4 rounded-xl shadow max-w-3xl mb-6">
         <h2 class="text-xl font-semibold mb-2">Agregar mercadería recibida</h2>
@@ -100,6 +106,7 @@
         <div class="flex gap-2">
           <button id="btnAgregarStock" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Agregar</button>
           <button id="btnVaciarStock" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">Vaciar stock</button>
+          <button id="btnRefrescarStock" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">🔄 Refrescar</button>
         </div>
       </div>
 
@@ -108,9 +115,6 @@
     </div>
   </main>
 
-  <!-- ===========================
-       SCRIPT - Productos, pedidos, stock
-       =========================== -->
   <script>
 /* ----------------- productosBase (completo) ----------------- */
 const productosBase = [
@@ -193,27 +197,98 @@ const productosBase = [
   { nombre: "Copos sin azucar 3kg", precio: 10500 },
 ];
 
-/* ------------------- CONFIG ------------------- */
 const porcentajes = [35, 49, 15, 25, 10, 7];
+
+/* ===============================================
+   VARIABLES GLOBALES
+   =============================================== */
+let pedidos = [];
+let stock = {};
+let numeroRemito = 1;
+
+/* ===============================================
+   FUNCIONES DE ALMACENAMIENTO SINCRONIZADO
+   =============================================== */
+
+async function cargarStock() {
+  try {
+    const result = await window.storage.get('stock-productos', true);
+    stock = result ? JSON.parse(result.value) : {};
+  } catch (error) {
+    console.log('Inicializando stock vacío');
+    stock = {};
+  }
+  renderStockUI();
+}
+
+async function guardarStock() {
+  try {
+    await window.storage.set('stock-productos', JSON.stringify(stock), true);
+    mostrarNotificacion('✅ Stock actualizado en todos los dispositivos');
+    renderStockUI();
+  } catch (error) {
+    console.error('Error guardando stock:', error);
+    alert('Error al guardar el stock. Intenta nuevamente.');
+  }
+}
+
+async function cargarPedidos() {
+  try {
+    const result = await window.storage.get('pedidos-lista', true);
+    pedidos = result ? JSON.parse(result.value) : [];
+    pedidos = pedidos
+      .filter(p => p && typeof p === "object")
+      .map(p => ({
+        ...p,
+        terminado: p.terminado ?? false
+      }));
+  } catch (error) {
+    console.log('Inicializando pedidos vacíos');
+    pedidos = [];
+  }
+  renderPedidos();
+}
+
+async function guardarPedidos() {
+  try {
+    await window.storage.set('pedidos-lista', JSON.stringify(pedidos), true);
+    renderPedidos();
+  } catch (error) {
+    console.error('Error guardando pedidos:', error);
+  }
+}
+
+async function cargarNumeroRemito() {
+  try {
+    const result = await window.storage.get('numero-remito', true);
+    numeroRemito = result ? parseInt(result.value) : 1;
+  } catch (error) {
+    numeroRemito = 1;
+  }
+}
+
+async function guardarNumeroRemito() {
+  try {
+    await window.storage.set('numero-remito', String(numeroRemito), true);
+  } catch (error) {
+    console.error('Error guardando número de remito:', error);
+  }
+}
+
+function mostrarNotificacion(mensaje) {
+  const notif = document.createElement('div');
+  notif.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+  notif.textContent = mensaje;
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 3000);
+}
+
+/* ===============================================
+   INTERFAZ DE USUARIO
+   =============================================== */
 
 const nuevoPedidoBtn = document.getElementById('nuevoPedidoBtn');
 const formulario = document.getElementById('formulario');
-nuevoPedidoBtn.addEventListener("click", () => {
-  formulario.classList.remove("hidden");
-  nuevoPedidoBtn.classList.add("hidden");
-  tablaProductos.innerHTML = "";
-
-
-  // Limpiar tabla de productos y crear una fila nueva vacía
-  tablaProductos.innerHTML = "";
-  crearFilaProducto();
-
-  // Limpiar los inputs
-  document.getElementById('nombre').value = "";
-  document.getElementById('direccion').value = "";
-  document.getElementById('cuit').value = "";
-});
-
 const cancelarBtn = document.getElementById('cancelar');
 const guardarBtn = document.getElementById('guardar');
 const agregarProductoBtn = document.getElementById('agregarProducto');
@@ -221,36 +296,26 @@ const tablaProductos = document.getElementById('tablaProductos');
 const pedidosPendientes = document.getElementById('pedidosPendientes');
 const pedidosTerminados = document.getElementById('pedidos-terminados');
 
+nuevoPedidoBtn.addEventListener("click", () => {
+  formulario.classList.remove("hidden");
+  nuevoPedidoBtn.classList.add("hidden");
+  tablaProductos.innerHTML = "";
+  crearFilaProducto();
+  document.getElementById('nombre').value = "";
+  document.getElementById('direccion').value = "";
+  document.getElementById('cuit').value = "";
+});
+
 cancelarBtn.addEventListener('click', () => {
   formulario.classList.add('hidden');
   nuevoPedidoBtn.classList.remove('hidden');
-
   document.getElementById('nombre').value = '';
   document.getElementById('direccion').value = '';
   document.getElementById('cuit').value = '';
-
   tablaProductos.innerHTML = '';
   crearFilaProducto();
   actualizarTotal();
 });
-
-
-let pedidos = JSON.parse(localStorage.getItem('pedidos')) || [];
-let stock = JSON.parse(localStorage.getItem("stock")) || [];
-
-
-
-
-pedidos = pedidos
-  .filter(p => p && typeof p === "object")
-  .map(p => ({
-    ...p,
-    terminado: p.terminado ?? false
-  }));
-
-localStorage.setItem('pedidos', JSON.stringify(pedidos));
-
-let numeroRemito = parseInt(localStorage.getItem('numeroRemito') || 1);
 
 /* ------------------- AUTOCOMPLETADO + PORCENTAJE ------------------- */
 function crearFilaProducto() {
@@ -278,24 +343,19 @@ function crearFilaProducto() {
   const eliminarBtn = row.querySelector(".eliminarProducto");
 
   function actualizarPrecio() {
-  const texto = input.value.toLowerCase();
-  const prod = productosBase.find(p => p.nombre.toLowerCase() === texto);
-
-  const cantidad = parseFloat(cantidadInput.value) || 0;
-  const porcentaje = parseFloat(porcentajeSelect.value);
-
-  if (prod) {
-    // Precio total correctamente calculado con cantidad y porcentaje
+    const texto = input.value.toLowerCase();
+    const prod = productosBase.find(p => p.nombre.toLowerCase() === texto);
+    const cantidad = parseFloat(cantidadInput.value) || 0;
     const porcentaje = parseFloat(porcentajeSelect.value);
-    const precioCalculado = (prod.precio * cantidad) * (1 + porcentaje / 100);
-    precioInput.value = precioCalculado.toFixed(2);
-  } else {
-    precioInput.value = "";
+
+    if (prod) {
+      const precioCalculado = (prod.precio * cantidad) * (1 + porcentaje / 100);
+      precioInput.value = precioCalculado.toFixed(2);
+    } else {
+      precioInput.value = "";
+    }
+    actualizarTotal();
   }
-
-  actualizarTotal();
-}
-
 
   input.addEventListener("input", () => {
     const texto = input.value.toLowerCase();
@@ -314,24 +374,16 @@ function crearFilaProducto() {
       });
     });
 
-    actualizarTotal(); // 👈 SE AGREGA
+    actualizarTotal();
   });
 
   input.addEventListener("blur", actualizarPrecio);
-
-  porcentajeSelect.addEventListener("change", () => {
-    actualizarPrecio();
-    actualizarTotal(); // 👈 SE AGREGA
-  });
-
-  cantidadInput.addEventListener("input", () => {
-    actualizarPrecio();
-    actualizarTotal(); // 👈 SE AGREGA
-  });
+  porcentajeSelect.addEventListener("change", actualizarPrecio);
+  cantidadInput.addEventListener("input", actualizarPrecio);
 
   eliminarBtn.addEventListener("click", () => {
     row.remove();
-    actualizarTotal(); // 👈 SE AGREGA
+    actualizarTotal();
   });
 
   tablaProductos.appendChild(row);
@@ -343,22 +395,18 @@ function actualizarTotal() {
     const precio = parseFloat(precioInput.value) || 0;
     total += precio;
   });
-
   document.getElementById('totalPedido').innerText = total.toFixed(2);
 }
-
-
 
 agregarProductoBtn.addEventListener("click", crearFilaProducto);
 
 /* ------------------- GUARDAR PEDIDO ------------------- */
-guardarBtn.addEventListener('click', () => {
+guardarBtn.addEventListener('click', async () => {
   const nombre = document.getElementById('nombre').value.trim();
   const direccion = document.getElementById('direccion').value.trim();
   const cuit = document.getElementById('cuit').value.trim();
   const fecha = new Date().toLocaleDateString();
 
-  // Obtener productos válidos
   const productos = Array.from(tablaProductos.querySelectorAll('tr'))
     .map(row => ({
       nombre: row.querySelector('.producto-input').value.trim(),
@@ -372,39 +420,27 @@ guardarBtn.addEventListener('click', () => {
     return;
   }
 
-  // =============================
-  // 🔻 DESCONTAR STOCK ACÁ 🔻
-  // =============================
+  // Descontar stock
   productos.forEach(p => {
     const nombreProd = p.nombre;
     const cantidadPedida = parseFloat(p.cantidad);
 
     if (stock[nombreProd] !== undefined) {
       stock[nombreProd] -= cantidadPedida;
-      if (stock[nombreProd] < 0) stock[nombreProd] = 0; // Evitar negativos
+      if (stock[nombreProd] < 0) stock[nombreProd] = 0;
     }
   });
 
-  // Guardar stock actualizado
-  localStorage.setItem("stock", JSON.stringify(stock));
-  renderStockUI();
-  // =============================
-  // 🔺 FIN DESCUENTO STOCK 🔺
-  // =============================
+  await guardarStock();
 
-  // Guardar el pedido
   pedidos.push({ nombre, direccion, cuit, fecha, productos, terminado: false, numero: numeroRemito });
   numeroRemito++;
-  localStorage.setItem('numeroRemito', numeroRemito);
-  localStorage.setItem('pedidos', JSON.stringify(pedidos));
+  await guardarNumeroRemito();
+  await guardarPedidos();
 
-  renderPedidos();
   formulario.classList.add('hidden');
   nuevoPedidoBtn.classList.remove('hidden');
 });
-
-
-
 
 /* ------------------- MOSTRAR PEDIDOS ------------------- */
 const renderPedidos = () => {
@@ -417,48 +453,40 @@ const renderPedidos = () => {
 
     const total = pedido.productos.reduce((sum, p) => sum + parseFloat(p.precio), 0);
 
-
     div.innerHTML = `
-  <p><strong>Cliente:</strong> ${pedido.nombre}</p>
-  <p><strong>Dirección:</strong> ${pedido.direccion}</p>
-  <p><strong>Cuit:</strong> ${pedido.cuit}</p>
-  <p><strong>Fecha:</strong> ${pedido.fecha}</p>
-
-  <details class="mt-2 mb-2">
-    <summary class="cursor-pointer text-sm text-blue-700 underline">Ver productos</summary>
-    <ul class="mt-1 text-sm">
-      ${pedido.productos.map(p => {
-    const cantidad = parseFloat(p.cantidad);
-    const totalFila = parseFloat(p.precio);
-    const unitario = totalFila / cantidad;
-    return `<li>${p.cantidad} x ${p.nombre} — $${unitario.toFixed(2)} c/u — Subtotal: $${totalFila.toFixed(2)}</li>`;
-    }).join("")}
-
-    </ul>
-  </details>
-
-  <p><strong>Total:</strong> $${total.toFixed(2)}</p>
-
-  <button onclick="terminarPedido(${index})" class="bg-green-600 text-white px-3 py-1 rounded">Terminar</button>
-  <button onclick="descargarPDF(${index})" class="bg-blue-600 text-white px-3 py-1 rounded">Remito</button>
-  <button onclick="editarPedido(${index})" class="bg-yellow-500 text-white px-3 py-1 rounded">Editar</button>
-  <button onclick="eliminarPedido(${index})" class="bg-gray-600 text-white px-3 py-1 rounded">Eliminar</button>
-`;
-
+      <p><strong>Cliente:</strong> ${pedido.nombre}</p>
+      <p><strong>Dirección:</strong> ${pedido.direccion}</p>
+      <p><strong>Cuit:</strong> ${pedido.cuit}</p>
+      <p><strong>Fecha:</strong> ${pedido.fecha}</p>
+      <details class="mt-2 mb-2">
+        <summary class="cursor-pointer text-sm text-blue-700 underline">Ver productos</summary>
+        <ul class="mt-1 text-sm">
+          ${pedido.productos.map(p => {
+            const cantidad = parseFloat(p.cantidad);
+            const totalFila = parseFloat(p.precio);
+            const unitario = totalFila / cantidad;
+            return `<li>${p.cantidad} x ${p.nombre} — $${unitario.toFixed(2)} c/u — Subtotal: $${totalFila.toFixed(2)}</li>`;
+          }).join("")}
+        </ul>
+      </details>
+      <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+      <button onclick="terminarPedido(${index})" class="bg-green-600 text-white px-3 py-1 rounded">Terminar</button>
+      <button onclick="descargarPDF(${index})" class="bg-blue-600 text-white px-3 py-1 rounded">Remito</button>
+      <button onclick="editarPedido(${index})" class="bg-yellow-500 text-white px-3 py-1 rounded">Editar</button>
+      <button onclick="eliminarPedido(${index})" class="bg-gray-600 text-white px-3 py-1 rounded">Eliminar</button>
+    `;
 
     if (pedido.terminado) pedidosTerminados.appendChild(div);
     else pedidosPendientes.appendChild(div);
   });
 };
 
-window.terminarPedido = (i) => {
+window.terminarPedido = async (i) => {
   pedidos[i].terminado = true;
-  localStorage.setItem('pedidos', JSON.stringify(pedidos));
-  renderPedidos();
+  await guardarPedidos();
 };
 
-window.eliminarPedido = (i) => {
-  // restaurar stock al eliminar (si fue descontado anteriormente)
+window.eliminarPedido = async (i) => {
   const pedido = pedidos[i];
   if (pedido && pedido.productos) {
     pedido.productos.forEach(p => {
@@ -467,19 +495,16 @@ window.eliminarPedido = (i) => {
       if (!stock[nombre]) stock[nombre] = 0;
       stock[nombre] += cant;
     });
-    localStorage.setItem('stock', JSON.stringify(stock));
+    await guardarStock();
   }
 
   pedidos.splice(i, 1);
-  localStorage.setItem('pedidos', JSON.stringify(pedidos));
-  renderPedidos();
-  renderStockUI();
+  await guardarPedidos();
 };
 
-window.editarPedido = (i) => {
+window.editarPedido = async (i) => {
   const pedido = pedidos[i];
 
-  // antes de editar, restauramos el stock de ese pedido (para no perder unidades)
   if (pedido && pedido.productos) {
     pedido.productos.forEach(p => {
       const nombre = p.nombre;
@@ -487,8 +512,7 @@ window.editarPedido = (i) => {
       if (!stock[nombre]) stock[nombre] = 0;
       stock[nombre] += cant;
     });
-    localStorage.setItem('stock', JSON.stringify(stock));
-    renderStockUI();
+    await guardarStock();
   }
 
   formulario.classList.remove("hidden");
@@ -506,14 +530,12 @@ window.editarPedido = (i) => {
     fila.querySelector('.producto-input').value = p.nombre;
     fila.querySelector('.cantidad-input').value = p.cantidad;
     fila.querySelector('.porcentaje').value = (function(){
-      // intento aproximado: si precio guardado / (basePrecio*cantidad) > 1, estimar porcentaje
       const base = productosBase.find(pb => pb.nombre === p.nombre);
       if (!base) return porcentajes[0];
       const precioFinal = parseFloat(p.precio);
       const baseTotal = base.precio * parseFloat(p.cantidad);
       if (baseTotal === 0) return porcentajes[0];
       const pct = Math.round((precioFinal / baseTotal - 1) * 100);
-      // elegir el porcentaje disponible más cercano
       let nearest = porcentajes[0];
       porcentajes.forEach(x => { if (Math.abs(x - pct) < Math.abs(nearest - pct)) nearest = x; });
       return nearest;
@@ -521,14 +543,11 @@ window.editarPedido = (i) => {
     fila.querySelector('.precio-final').value = p.precio;
   });
 
-  // eliminamos el pedido original para que al guardar quede actualizado
   pedidos.splice(i, 1);
-  localStorage.setItem('pedidos', JSON.stringify(pedidos));
-  renderPedidos();
+  await guardarPedidos();
 };
 
-
-/* ------------------- PDF (NO TOQUÉ NADA) ------------------- */
+/* ------------------- PDF ------------------- */
 const { jsPDF } = window.jspdf;
 window.descargarPDF = (index) => {
   const pedido = pedidos[index];
@@ -586,54 +605,44 @@ window.descargarPDF = (index) => {
   y += 20;
 
   let total = 0;
-pedido.productos.forEach(p => {
-  const cantidad = parseFloat(p.cantidad);
-  const totalFila = parseFloat(p.precio); // este es el total final que guardaste
-  const precioUnitario = totalFila / cantidad; // acá recuperamos el unitario
-  const subtotal = precioUnitario * cantidad; // subtotal correcto
-  total += subtotal;
+  pedido.productos.forEach(p => {
+    const cantidad = parseFloat(p.cantidad);
+    const totalFila = parseFloat(p.precio);
+    const precioUnitario = totalFila / cantidad;
+    const subtotal = precioUnitario * cantidad;
+    total += subtotal;
 
-  // ←——— SALTO DE PÁGINA AUTOMÁTICO ———→
-  if (y > 700) {           // límite de la hoja A4 en px (portrait)
-    doc.addPage();
-    y = 40;                // reiniciás donde querés que arranque en la nueva página
+    if (y > 700) {
+      doc.addPage();
+      y = 40;
 
-    // Encabezados de columnas en la nueva hoja
-    doc.setFontSize(12);
-    doc.text("Cant.", 16, y);
-    doc.text("Producto", 150, y);
-    doc.text("Precio", 300, y);
-    doc.text("Subtotal", 380, y);
-    y += 20;
-  }
+      doc.setFontSize(12);
+      doc.text("Cant.", 16, y);
+      doc.text("Producto", 150, y);
+      doc.text("Precio", 300, y);
+      doc.text("Subtotal", 380, y);
+      y += 20;
+    }
 
-  // Imprimir fila
-  doc.setFontSize(11);
-  doc.text(String(cantidad), 20, y);
-  doc.text(p.nombre, 50, y);
-  doc.text(`$${precioUnitario.toFixed(2)}`, 300, y);
-  doc.text(`$${subtotal.toFixed(2)}`, 380, y);
+    doc.setFontSize(11);
+    doc.text(String(cantidad), 20, y);
+    doc.text(p.nombre, 50, y);
+    doc.text(`${precioUnitario.toFixed(2)}`, 300, y);
+    doc.text(`${subtotal.toFixed(2)}`, 380, y);
 
-  y += 13; // separación entre renglones
-
-});
-
+    y += 13;
+  });
 
   doc.setFontSize(14);
   doc.setTextColor(200, 0, 0);
-  doc.text(`TOTAL: $${total.toFixed(2)}`, 325, y + 20);
+  doc.text(`TOTAL: ${total.toFixed(2)}`, 325, y + 20);
 
   doc.save(`Remito_${pedido.nombre}.pdf`);
 };
 
-renderPedidos();
-
-/* ----------------- STOCK: render del UI y datalist ----------------- */
-
-function guardarStock() {
-  localStorage.setItem("stock", JSON.stringify(stock));
-  renderStockUI();
-}
+/* ===============================================
+   GESTIÓN DE STOCK SINCRONIZADO
+   =============================================== */
 
 function renderStockUI() {
   const lista = document.getElementById('listaStock');
@@ -657,14 +666,12 @@ function renderStockUI() {
         value="${k}"
         onchange="editarStockNombre('${k}', this.value)"
       />
-
       <input 
         type="number" 
         class="border p-1 rounded w-24"
         value="${stock[k]}"
         onchange="editarStockCantidad('${k}', this.value)"
       />
-
       <button 
         class="bg-red-600 text-white px-2 py-1 rounded"
         onclick="eliminarStock('${k}')"
@@ -676,39 +683,30 @@ function renderStockUI() {
     lista.appendChild(div);
   });
 }
-function editarStockNombre(nombreViejo, nombreNuevo) {
-  if (!nombreNuevo.trim()) return;
 
+window.editarStockNombre = async (nombreViejo, nombreNuevo) => {
+  if (!nombreNuevo.trim()) return;
   stock[nombreNuevo] = stock[nombreViejo];
   delete stock[nombreViejo];
+  await guardarStock();
+};
 
-  localStorage.setItem("stock", JSON.stringify(stock));
-  renderStockUI();
-}
-
-function editarStockCantidad(nombre, cantidad) {
+window.editarStockCantidad = async (nombre, cantidad) => {
   stock[nombre] = Number(cantidad);
-  localStorage.setItem("stock", JSON.stringify(stock));
-  renderStockUI();
-}
+  await guardarStock();
+};
 
-function eliminarStock(nombre) {
+window.eliminarStock = async (nombre) => {
   delete stock[nombre];
-  localStorage.setItem("stock", JSON.stringify(stock));
-  renderStockUI();
-}
+  await guardarStock();
+};
 
-
-// llenar datalist con productosBase (para autocompletar al agregar stock)
 function fillDatalistProductos() {
   const dl = document.getElementById('productosList');
   dl.innerHTML = productosBase.map(p => `<option value="${p.nombre}">`).join('');
 }
-fillDatalistProductos();
-renderStockUI();
 
-/* ----------------- BOTONES STOCK ----------------- */
-document.getElementById('btnAgregarStock').addEventListener('click', () => {
+document.getElementById('btnAgregarStock').addEventListener('click', async () => {
   const nombre = document.getElementById('stockProducto').value.trim();
   const cantidad = parseInt(document.getElementById('stockCantidad').value, 10);
   if (!nombre || isNaN(cantidad) || cantidad <= 0) {
@@ -716,51 +714,61 @@ document.getElementById('btnAgregarStock').addEventListener('click', () => {
     return;
   }
   stock[nombre] = (stock[nombre] || 0) + cantidad;
-  localStorage.setItem('stock', JSON.stringify(stock));
+  await guardarStock();
   document.getElementById('stockProducto').value = '';
   document.getElementById('stockCantidad').value = '';
-  renderStockUI();
 });
 
-// botón debug para vaciar stock (te puede servir para pruebas)
-document.getElementById('btnVaciarStock').addEventListener('click', () => {
-  if (!confirm('Vaciar todo el stock? (solo para pruebas)')) return;
+document.getElementById('btnVaciarStock').addEventListener('click', async () => {
+  if (!confirm('¿Vaciar todo el stock?')) return;
   stock = {};
-  localStorage.setItem('stock', JSON.stringify(stock));
-  renderStockUI();
+  await guardarStock();
 });
 
-/* ----------------- AL INICIAR: asegurar fila y total ----------------- */
-if (!tablaProductos.querySelector('tr')) crearFilaProducto();
-actualizarTotal();
+document.getElementById('btnRefrescarStock').addEventListener('click', async () => {
+  await cargarStock();
+  mostrarNotificacion('🔄 Stock actualizado desde la base de datos');
+});
 
-
-
-// =====================
-// BOTONES DEL MENÚ LATERAL
-// =====================
+/* ===============================================
+   BOTONES DEL MENÚ LATERAL
+   =============================================== */
 
 const btnPedidos = document.getElementById("btnPedidos");
-const btnStock   = document.getElementById("btnStock");
-
+const btnStock = document.getElementById("btnStock");
 const seccionPedidos = document.getElementById("seccionPedidos");
-const seccionStock   = document.getElementById("seccionStock");
+const seccionStock = document.getElementById("seccionStock");
 
-// Mostrar PEDIDOS
 btnPedidos.addEventListener("click", () => {
   seccionPedidos.classList.remove("hidden");
   seccionStock.classList.add("hidden");
 });
 
-// Mostrar STOCK
 btnStock.addEventListener("click", () => {
   seccionStock.classList.remove("hidden");
   seccionPedidos.classList.add("hidden");
 });
 
+/* ===============================================
+   INICIALIZACIÓN
+   =============================================== */
 
+async function inicializar() {
+  await cargarStock();
+  await cargarPedidos();
+  await cargarNumeroRemito();
+  fillDatalistProductos();
+  
+  if (!tablaProductos.querySelector('tr')) crearFilaProducto();
+  actualizarTotal();
+}
+
+inicializar();
+
+// Auto-refrescar stock cada 10 segundos para mantener sincronizado
+setInterval(async () => {
+  await cargarStock();
+}, 10000);
   </script>
 </body>
 </html>
-
-
